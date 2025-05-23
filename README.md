@@ -1,6 +1,6 @@
 # 📘 GraphRAG-LiteX: Lightweight Graph-Based Retrieval-Augmented Generation
 
-![GraphRAG-LiteX Banner](src/banner.png)
+![GraphRAG-LiteX Banner](src/banner.jpeg)
 
 GraphRAG-LiteX is a **lightweight**, **modular**, and **locally executable** version of the GraphRAG framework, built to run on modern LLMs like DeepSeek via LM Studio. It enables **knowledge graph-based retrieval-augmented generation** and provides a built-in evaluation framework comparing GraphRAG against traditional vector-based RAG pipelines.
 
