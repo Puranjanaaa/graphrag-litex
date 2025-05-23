@@ -194,10 +194,10 @@ def save_evaluation_to_csv(evaluations, output_path):
                     row["question"],
                     row["criterion"],
                     row["judgment"].get("winner", "N/A"),
-                    row["winning_system"],
-                    row["system1"],
+                    "GraphRAGLiteX" if row["winning_system"] == "SimpleGraphRAG" else row["winning_system"],
+                    "GraphRAGLiteX" if row["system1"] == "SimpleGraphRAG" else row["system1"],
                     row["score1"],
-                    row["system2"],
+                    "GraphRAGLiteX" if row["system2"] == "SimpleGraphRAG" else row["system2"],
                     row["score2"],
                     row["judgment"].get("reasoning", "").replace("\n", " ").strip()
                 ])
@@ -205,6 +205,7 @@ def save_evaluation_to_csv(evaluations, output_path):
         logger.info(f"Saved evaluation results to: {output_path}")
     except Exception as e:
         logger.error(f"Error saving evaluation results: {str(e)}")
+
 
 
 if __name__ == "__main__":
