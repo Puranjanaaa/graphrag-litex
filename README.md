@@ -19,25 +19,28 @@ GraphRAG-LiteX is a **lightweight**, **modular**, and **locally executable** ver
 ## 📂 Project Structure
 .
 ├── config.py
-├── graphrag_lite_x.py # Main pipeline (graph builder + answer generator)
-├── main.py # Optional entry point
+├── graphrag_lite_x.py (Main pipeline - graph builder + answer generator)
+├── main.py (Optional entry point)
 ├── requirements.txt
-├── .env # API keys and model info
+├── .env (API keys and model info)
 ├── README.md
+│
 ├── utils/
 │ ├── async_utils.py
 │ ├── io_utils.py
 │ ├── prompts.py
 │ └── llm_client.py
+│
 ├── models/
 │ ├── claim.py
 │ ├── entity.py
 │ ├── relationship.py
 │ └── knowledge_graph.py
-├── evaluation/
-│ ├── evaluate_graphrag.py # Compares GraphRAG-LiteX vs VectorRAG
-│ ├── llm_judge.py # LLM-based evaluation
-│ └── *.csv # Saved evaluation results
+│
+└── evaluation/
+├── evaluate_graphrag.py (Compares GraphRAG-LiteX vs VectorRAG)
+├── llm_judge.py (LLM-based evaluation)
+└── *.csv (Saved evaluation results)
 
 
 ---
@@ -60,10 +63,14 @@ LLM_MODEL_NAME=deepseek-r1-distill-qwen-7b
 ### 🚀 Running the Pipeline
 
 Run GraphRAG-LiteX:
+```bash
 python3 graphrag_lite_x.py --documents ./data/documents
+```
 
 Evaluate GraphRAG-LiteX vs VectorRAG:
+```bash
 python3 -m evaluation.evaluate_graphrag
+```
 
 ### 🖼️ System Architecture
 
