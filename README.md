@@ -17,7 +17,6 @@ GraphRAG-LiteX is a **lightweight**, **modular**, and **locally executable** ver
 ---
 
 ## 📂 Project Structure
-
 .
 ├── config.py
 ├── graphrag_lite_x.py # Main pipeline (graph builder + answer generator)
@@ -57,32 +56,39 @@ Add a .env file:
 
 LLM_API_KEY=your_api_key_here
 LLM_MODEL_NAME=deepseek-r1-distill-qwen-7b
-🚀 Running the Pipeline
+```
+### 🚀 Running the Pipeline
 
-Run GraphRAG-LiteX
+Run GraphRAG-LiteX:
 python3 graphrag_lite_x.py --documents ./data/documents
-Evaluate GraphRAG-LiteX vs VectorRAG
+
+Evaluate GraphRAG-LiteX vs VectorRAG:
 python3 -m evaluation.evaluate_graphrag
-🖼️ System Architecture
+
+### 🖼️ System Architecture
 
 Documents → Claim & Entity Extraction
 Nodes/Edges → Knowledge Graph
 Query → Subgraph Retrieval
 Subgraph → LLM → Final Answer
-📊 Sample Evaluation Output
+
+### 📊 Sample Evaluation Output
 
 System	Wins	Percentage
 GraphRAG-LiteX	10	83.3%
 VectorRAG	2	16.7%
+
 📈 Based on criteria like comprehensiveness, faithfulness, empowerment, and coherence.
-🧠 Model Recommendation
+
+### 🧠 Model Recommendation
 
 Tested and tuned with:
 
 ✅ deepseek-r1-distill-qwen-7b
 ✅ LM Studio for inference
 ✅ Works with any OpenAI-compatible endpoint
-📌 Use Cases
+
+### 📌 Use Cases
 
 ✅ Research on graph-based reasoning
 ✅ Comparative retrieval models
@@ -97,16 +103,25 @@ Please:
 Follow the folder structure
 Include docstrings and inline comments
 Add test cases for new components (if applicable)
-📄 License
 
-Distributed under the MIT License. See LICENSE for more information.
+### 🙌 Credits
 
-🙌 Credits
+Inspired by Microsoft Research’s GraphRAG methodology for global query-focused summarization:
+📄 From Local to Global: A Graph RAG Approach to Query-Focused Summarization
+Darren Edge, Ha Trinh, Newman Cheng, Joshua Bradley, Alex Chao, Apurva Mody, Steven Truitt, Dasha Metropolitansky, Robert Osazuwa Ness, Jonathan Larson
+arXiv:2404.16130
+DOI: 10.48550/arXiv.2404.16130
 
-Inspired by Microsoft’s GraphRAG paper.
-Uses DeepSeek’s distill models via LM Studio.
+Uses DeepSeek’s distill model (deepseek-r1-distill-qwen-7b) for local LLM inference:
+🔗 Hugging Face model card:
+https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+Powered locally using LM Studio – open-source desktop LLM inference engine:
+🌐 Official website:
+https://lmstudio.ai
+
 Built for experimental research and educational use.
-📫 Contact
 
-For questions or collaboration, reach out to YourName or open an issue.
+ ### 📫 Contact
+
+puranja@gmail.com for questions or collaboration.
 
