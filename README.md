@@ -45,13 +45,11 @@ python3 -m evaluation.evaluate_graphrag
 
 ### 🖼️ System Architecture
 
-![System Architecture](src/architecture.jpeg)
+![System Architecture]
+<p align="center">
+  <img src="src/architecture.jpeg" alt="System Architecture" width="400"/>
+</p>
 
-
-Documents → Claim & Entity Extraction
-Nodes/Edges → Knowledge Graph
-Query → Subgraph Retrieval
-Subgraph → LLM → Final Answer
 
 ### 📊 Sample Evaluation Output
 
