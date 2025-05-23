@@ -24,10 +24,19 @@ GraphRAG-LiteX is a **lightweight**, **modular**, and **locally executable** ver
 
 ### 🔧 Setup
 
+Create a virtual environment
+```bash
+python3 -m venv venv
+souce venv/bin/activate
+```
+
+Install dependencies
 ```bash
 pip install -r requirements.txt
+```
 Add a .env file:
 
+```bash
 LM_STUDIO_URL='deepseek url here'
 ```
 ### 🚀 Running the Pipeline
