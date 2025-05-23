@@ -28,8 +28,7 @@ GraphRAG-LiteX is a **lightweight**, **modular**, and **locally executable** ver
 pip install -r requirements.txt
 Add a .env file:
 
-LLM_API_KEY=your_api_key_here
-LLM_MODEL_NAME=deepseek-r1-distill-qwen-7b
+LM_STUDIO_URL='deepseek url here'
 ```
 ### 🚀 Running the Pipeline
 
