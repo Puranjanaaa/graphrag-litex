@@ -16,35 +16,6 @@ GraphRAG-LiteX is a **lightweight**, **modular**, and **locally executable** ver
 
 ---
 
-## 📂 Project Structure
-.
-├── config.py
-├── graphrag_lite_x.py           # Main pipeline – graph builder + answer generator
-├── main.py                      # Optional entry point
-├── requirements.txt
-├── .env                         # API keys and model info
-├── README.md
-
-├── utils/
-│   ├── async_utils.py
-│   ├── io_utils.py
-│   ├── prompts.py
-│   └── llm_client.py
-
-├── models/
-│   ├── claim.py
-│   ├── entity.py
-│   ├── relationship.py
-│   └── knowledge_graph.py
-
-├── evaluation/
-│   ├── evaluate_graphrag.py     # Compares GraphRAG-LiteX vs VectorRAG
-│   ├── llm_judge.py             # LLM-based evaluation
-│   └── *.csv                    # Saved evaluation results
-
-
----
-
 ## 🧰 Requirements
 
 - Python 3.9+
@@ -73,6 +44,9 @@ python3 -m evaluation.evaluate_graphrag
 ```
 
 ### 🖼️ System Architecture
+
+![System Architecture](src/architecture.jpeg)
+
 
 Documents → Claim & Entity Extraction
 Nodes/Edges → Knowledge Graph
