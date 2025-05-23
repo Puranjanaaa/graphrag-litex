@@ -1,6 +1,6 @@
 # 📘 GraphRAG-LiteX: Lightweight Graph-Based Retrieval-Augmented Generation
 
-![GraphRAG-LiteX Banner](https://user-images.githubusercontent.com/12345678/graphrag_litex_banner.png)
+![GraphRAG-LiteX Banner](src/banner.png)
 
 GraphRAG-LiteX is a **lightweight**, **modular**, and **locally executable** version of the GraphRAG framework, built to run on modern LLMs like DeepSeek via LM Studio. It enables **knowledge graph-based retrieval-augmented generation** and provides a built-in evaluation framework comparing GraphRAG against traditional vector-based RAG pipelines.
 
@@ -51,13 +51,15 @@ python3 -m evaluation.evaluate_graphrag
 </p>
 
 
-### 📊 Sample Evaluation Output
+### 📊 Evaluation Summary
 
-System	Wins	Percentage
-GraphRAG-LiteX	10	83.3%
-VectorRAG	2	16.7%
+| System         | Wins | Percentage |
+|----------------|------|------------|
+| GraphRAG-LiteX | 10   | 83.3%      |
+| VectorRAG      | 2    | 16.7%      |
 
-📈 Based on criteria like comprehensiveness, faithfulness, empowerment, and coherence.
+
+(Based on criteria like comprehensiveness, faithfulness, empowerment, and coherence.)
 
 ### 🧠 Model Recommendation
 
@@ -73,7 +75,8 @@ Tested and tuned with:
 ✅ Comparative retrieval models
 ✅ NLP and QA prototyping
 ✅ Lightweight RAG system demos
-🤝 Contributing
+
+### 🤝 Contributing
 
 We welcome PRs, issues, and suggestions!
 
