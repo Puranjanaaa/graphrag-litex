@@ -227,8 +227,8 @@ async def main():
     # Default questions if none provided
     questions = args.questions or [
         "What are the main topics discussed in these documents?",
-        "What are the key entities mentioned and how are they related?",
-        "What are the most important insights from these documents?"
+        # "What are the key entities mentioned and how are they related?",
+        # "What are the most important insights from these documents?"
     ]
     
     # Run GraphRAG

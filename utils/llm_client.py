@@ -11,6 +11,7 @@ import aiohttp
 import logging
 
 from config import GraphRAGConfig
+from sentence_transformers import SentenceTransformer
 
 from dotenv import load_dotenv
 
@@ -35,6 +36,7 @@ class LLMClient:
         self.base_url = os.getenv("LM_STUDIO_URL")
         print(f"Using base URL: {self.base_url}")
         self.logging_enabled = config.logging_enabled
+        self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
         
         if self.logging_enabled:
             logging.basicConfig(level=logging.INFO)
@@ -46,6 +48,14 @@ class LLMClient:
         max_tries=5,
         base=2
     )
+    async def embed(self, text: str) -> List[float]:
+        """
+        Compute an embedding for the given text using a local sentence-transformer.
+        """
+        # This is sync, so run in executor to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.embedding_model.encode, text)
+    
     async def generate(
         self, 
         prompt: str, 
