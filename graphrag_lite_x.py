@@ -1,3 +1,5 @@
+### File: graphrag_lite_x.py
+
 #!/usr/bin/env python3
 
 import os
@@ -5,26 +7,22 @@ import sys
 import asyncio
 import argparse
 import logging
+import json
 from typing import Dict, List, Any
 from dotenv import load_dotenv
 
-load_dotenv()  # Load variables from .env file
+load_dotenv()
 LM_STUDIO_URL = os.getenv("LM_STUDIO_URL")
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("SimpleGraphRAG")
 
-# Get the absolute path of the directory containing this script
 current_dir = os.path.abspath(os.path.dirname(__file__))
-
-# Add current directory to Python path so all imports work
 sys.path.insert(0, current_dir)
 
-# Import the original configuration and components
 from config import GraphRAGConfig
 from utils.llm_client import LLMClient
 from extraction.text_chunker import TextChunker
@@ -36,12 +34,7 @@ from indexing.summarizer import CommunitySummarizer
 from querying.answer_generator import AnswerGenerator
 from main import GraphRAG
 
-
 class SimpleGraphRAG(GraphRAG):
-    """
-    A simplified GraphRAG implementation that works better with Deep Seek models.
-    """
-
     def __init__(self, config: GraphRAGConfig):
         logger.info("Initializing Simple GraphRAG")
 
@@ -74,7 +67,7 @@ async def run_simple_graphrag(
     lm_studio_url: str = LM_STUDIO_URL,
     save_directory: str = None,
     community_level: str = "C0"
-) -> List[str]:
+) -> List[Dict[str, Any]]:
     config = GraphRAGConfig(
         lm_studio_base_url=lm_studio_url,
         llm_temperature=0.1,
@@ -113,23 +106,22 @@ async def run_simple_graphrag(
         try:
             logger.info(f"Generating answer for question: {question}")
 
-            # ✅ FIXED: Use graph_rag (not self)
-            answer = await graph_rag.answer_generator.generate_answer(
+            structured_answer = await graph_rag.answer_generator.generate_answer(
                 question=question,
                 kg=graph_rag.knowledge_graph,
                 community_level=community_level
             )
 
-            print("\nAnswer:")
-            print(answer)
+            print("\nStructured Answer:")
+            print(json.dumps(structured_answer, indent=2))
             print("=" * 80)
 
-            answers.append(answer)
+            answers.append(structured_answer)
         except Exception as e:
             logger.error(f"Error generating answer: {e}")
             print(f"\nError generating answer: {e}")
             print("=" * 80)
-            answers.append(f"[ERROR: {e}]")
+            answers.append({"error": str(e)})
 
     return answers
 
