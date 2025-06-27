@@ -8,25 +8,19 @@ from models.knowledge_graph import KnowledgeGraph
 from utils.llm_client import LLMClient
 from utils.prompts import PromptTemplates
 from querying.map_reduce import MapReduceProcessor
-from utils.embedding_utils import EmbeddingUtils  # NEW: utility for embedding-based retrieval
+from utils.embedding_utils import EmbeddingUtils
+
 
 class AnswerGenerator:
     """
     Generates answers to user queries using community summaries.
-    Incorporates retrieval and subgraph-based reasoning for scalability.
     """
-    def __init__(self, llm_client: LLMClient, config: GraphRAGConfig):
-        """
-        Initialize the answer generator.   
-        Args:
-            llm_client: The LLM client
-            config: The GraphRAG configuration
 
-        """
+    def __init__(self, llm_client: LLMClient, config: GraphRAGConfig):
         self.llm_client = llm_client
         self.config = config
         self.map_reduce = MapReduceProcessor(llm_client, config)
-        self.embedding_util = EmbeddingUtils(config)  # NEW: handles vector similarity search
+        self.embedding_util = EmbeddingUtils(config)
 
     async def generate_answer(
         self,
@@ -35,58 +29,49 @@ class AnswerGenerator:
         community_level: str = "C0",
         top_k: int = 10
     ) -> str:
-        """
-        Generate an answer using top-k relevant community summaries.
-        """
         print(f"Generating answer for question: {question}")
         print(f"Using community level: {community_level}")
 
-        # Step 1: Retrieve community summaries
-        all_summaries = self._get_community_summaries(kg, community_level)
-        if not all_summaries:
+        summaries = self._get_community_summaries(kg, community_level)
+        if not summaries:
             return "No community summaries available to answer the question."
 
-        print(f"Retrieved {len(all_summaries)} total summaries")
+        print(f"Retrieved {len(summaries)} total summaries")
 
-        # Step 2: Retrieve top-K relevant summaries using embedding similarity
-        selected_summaries = await self.embedding_util.select_top_k_summaries(
-            summaries=all_summaries,
+        selected = await self.embedding_util.select_top_k_summaries(
+            summaries=summaries,
             question=question,
             k=top_k
         )
 
-        print(f"Selected top {len(selected_summaries)} summaries for reasoning")
+        print(f"Selected top {len(selected)} summaries for reasoning")
 
-        if not selected_summaries:
+        if not selected:
             return "No relevant community summaries found for the question."
 
         try:
-            # Step 3: Run map-reduce reasoning
-            answer = await self.map_reduce.process(
-                items=selected_summaries,
+            return await self.map_reduce.process(
+                items=selected,
                 question=question,
                 map_func=self._map_community_summary,
                 reduce_func=self._reduce_community_answers
             )
-            return answer
-
         except Exception as e:
             print(f"[ERROR] MapReduce failed: {str(e)}")
-            return self._fallback_simple_answer(selected_summaries)
+            return self._fallback_simple_answer(selected)
 
     def _get_community_summaries(
         self,
         kg: KnowledgeGraph,
         community_level: str
     ) -> List[Dict[str, Any]]:
-        """Fetch all summaries for the selected community level."""
         summaries = []
         if not hasattr(kg, 'community_summaries') or not isinstance(kg.community_summaries, dict):
             return []
 
-        level_num = community_level.replace("C", "")
+        level = community_level.replace("C", "")
         for community_id, summary in kg.community_summaries.items():
-            if level_num == "0" or community_id.startswith(f"{level_num}_"):
+            if level == "0" or community_id.startswith(f"{level}_"):
                 if isinstance(summary, dict):
                     summary_copy = summary.copy()
                     summary_copy["id"] = community_id
@@ -100,20 +85,22 @@ class AnswerGenerator:
         community_summary: Dict[str, Any],
         question: str
     ) -> Optional[Dict[str, Any]]:
-        """Map summary to answer via LLM."""
         try:
             community_id = community_summary.get("id", "unknown")
             report_data = self._format_summary_as_report(community_id, community_summary)
 
-            return await MapReduceProcessor.default_map_function(
-                item=report_data,
+            # Use extract_json instead of generate + parsing
+            prompt = PromptTemplates.format_community_answer_prompt(
                 question=question,
-                llm_client=self.llm_client,
-                template_formatter=lambda q, r: PromptTemplates.format_community_answer_prompt(
-                    question=q, report_data=r
-                ),
-                source_id=community_id
+                report_data=report_data
             )
+            json_response = await self.llm_client.extract_json(prompt)
+
+            return {
+                "answer": json_response.get("answer", ""),
+                "helpfulness": json_response.get("helpfulness", 0),
+                "source": community_id
+            }
         except Exception as e:
             return {
                 "answer": f"Error processing summary {community_summary.get('id', 'unknown')}: {str(e)}",
@@ -126,7 +113,6 @@ class AnswerGenerator:
         mapped_results: List[Dict[str, Any]],
         question: str
     ) -> str:
-        """Combine mapped answers into a final answer."""
         valid = [r for r in mapped_results if r and "answer" in r]
         if not valid:
             return "No relevant information found to answer the question."
@@ -145,7 +131,6 @@ class AnswerGenerator:
         return await self.llm_client.generate(prompt)
 
     def _format_summary_as_report(self, community_id: str, summary: Dict[str, Any]) -> str:
-        """Convert summary dict to textual report."""
         try:
             findings = summary.get("findings", [])
             finding_text = ""
@@ -166,8 +151,26 @@ class AnswerGenerator:
             return f"Error formatting report {community_id}: {str(e)}"
 
     def _fallback_simple_answer(self, summaries: List[Dict[str, Any]]) -> str:
-        """Fallback: basic formatted string from summaries."""
         simple_answer = "Based on the available information:\n\n"
         for i, summary in enumerate(summaries[:3]):
             simple_answer += f"• {summary.get('title', f'Community {i+1}')}: {summary.get('summary', 'No summary')}\n\n"
         return simple_answer
+
+
+async def generate_answer(
+    question: str,
+    kg: KnowledgeGraph,
+    community_level: str = "C0",
+    top_k: int = 10
+) -> str:
+    """
+    Standalone function for generating answers.
+    This is a wrapper around the AnswerGenerator class for compatibility.
+    """
+    from config import GraphRAGConfig
+    
+    config = GraphRAGConfig()
+    llm_client = LLMClient()
+    generator = AnswerGenerator(llm_client, config)
+    
+    return await generator.generate_answer(question, kg, community_level, top_k)

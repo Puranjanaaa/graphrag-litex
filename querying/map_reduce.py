@@ -67,55 +67,35 @@ class MapReduceProcessor:
     
     @staticmethod
     async def default_map_function(
-        item: Any,  # Changed from Dict[str, Any] to Any
+        item: Any,
         question: str,
         llm_client: LLMClient,
         template_formatter: Callable[[str, str], str],
-        source_id: str = "unknown"  # Added parameter for source ID
+        source_id: str = "unknown"
     ) -> Dict[str, Any]:
         """
         Default map function for community summaries.
-        
-        Args:
-            item: The community summary (can be dict or string)
-            question: The user question
-            llm_client: The LLM client
-            template_formatter: Function to format the prompt template
-            source_id: Optional source ID to use if item is not a dict
-            
-        Returns:
-            The mapped result with answer and helpfulness
         """
         try:
-            # Format the prompt - handles both string and dict inputs
             if isinstance(item, dict):
                 prompt = template_formatter(question, item)
-                # Extract source ID from item if it's a dict
                 source = item.get("id", source_id)
             else:
-                # If item is a string, just use it directly
                 prompt = template_formatter(question, item)
                 source = source_id
-            
-            # Generate the answer
-            response = await llm_client.generate(prompt)
-            
-            # Parse the helpfulness score
-            answer, helpfulness = MapReduceProcessor._parse_helpfulness(response)
-            
-            # Check if the answer is helpful
-            if helpfulness > 0:
-                return {
-                    "answer": answer,
-                    "helpfulness": helpfulness,
-                    "source": source
-                }
-            else:
-                return {
-                    "answer": "This information is not relevant to the question.",
-                    "helpfulness": 0.0,
-                    "source": source
-                }
+
+            # Use robust JSON extraction
+            response_json = await llm_client.extract_json(prompt)
+
+            answer = response_json.get("answer", "No answer returned")
+            helpfulness = float(response_json.get("helpfulness", 0))
+
+            return {
+                "answer": answer,
+                "helpfulness": helpfulness,
+                "source": source
+            }
+
         except Exception as e:
             import traceback
             print(f"[DEBUG] Error in default_map_function: {str(e)}")
@@ -135,15 +115,7 @@ class MapReduceProcessor:
     ) -> str:
         """
         Default reduce function for community answers.
-        
-        Args:
-            mapped_results: List of mapped results
-            question: The user question
-            llm_client: The LLM client
-            template_formatter: Function to format the prompt template
-            
-        Returns:
-            The final answer
+        Enforces structured output (JSON).
         """
         if not mapped_results:
             return "No relevant information found to answer the question."
@@ -158,68 +130,33 @@ class MapReduceProcessor:
             formatted_answers += f"\n\nAnswer {i+1} (Helpfulness: {result.get('helpfulness', 0)}):\n"
             formatted_answers += result.get("answer", "No answer")
         
-        # Generate the final answer
+        # Generate the structured response
         prompt = template_formatter(question, formatted_answers)
-        
-        response = await llm_client.generate(prompt)
-        
-        return response
-    
+
+        try:
+            response_json = await llm_client.extract_json(prompt)
+
+            # Ensure required fields are present
+            if not all(k in response_json for k in ["question", "main_topics", "summary", "confidence"]):
+                raise ValueError("Missing required keys in structured answer")
+
+            return response_json  # Final structured result as JSON/dict
+
+        except Exception as e:
+            import traceback
+            print(f"[DEBUG] Error parsing structured reduce output: {e}")
+            print(traceback.format_exc())
+            return {
+                "question": question,
+                "main_topics": [],
+                "summary": "Failed to generate a structured response.",
+                "confidence": 0.0
+            }
+
     @staticmethod
     def _parse_helpfulness(answer: str) -> Tuple[str, int]:
         """
-        Parse the helpfulness score from an answer.
-        
-        Args:
-            answer: The generated answer
-            
-        Returns:
-            A tuple of (cleaned_answer, helpfulness_score)
+        [Deprecated] Helper to parse helpfulness from non-JSON answers.
+        Not used anymore.
         """
-        helpfulness = 0
-        cleaned_answer = answer
-        
-        # Try to extract the helpfulness score
-        helpfulness_marker = "<ANSWER HELPFULNESS>"
-        helpfulness_end_marker = "</ANSWER HELPFULNESS>"
-        
-        if helpfulness_marker in answer and helpfulness_end_marker in answer:
-            # Extract the score
-            start_idx = answer.find(helpfulness_marker) + len(helpfulness_marker)
-            end_idx = answer.find(helpfulness_end_marker)
-            
-            if start_idx < end_idx:
-                helpfulness_str = answer[start_idx:end_idx].strip()
-                
-                try:
-                    helpfulness = int(helpfulness_str)
-                    
-                    # Remove the helpfulness markers from the answer
-                    cleaned_answer = (
-                        answer[:answer.find(helpfulness_marker)] + 
-                        answer[answer.find(helpfulness_end_marker) + len(helpfulness_end_marker):]
-                    ).strip()
-                except ValueError:
-                    # Invalid helpfulness score
-                    pass
-        
-        # Check for JSON format answers that might have a 'helpfulness' field
-        import json
-        try:
-            if '{' in answer and '}' in answer:
-                json_start = answer.find('{')
-                json_end = answer.rfind('}') + 1
-                json_str = answer[json_start:json_end]
-                
-                data = json.loads(json_str)
-                if 'helpfulness' in data:
-                    try:
-                        helpfulness = float(data['helpfulness'])
-                        if 'answer' in data:
-                            cleaned_answer = data['answer']
-                    except:
-                        pass
-        except:
-            pass
-            
-        return cleaned_answer, helpfulness
+        return answer, 0  # Not used since extract_json is now the default
