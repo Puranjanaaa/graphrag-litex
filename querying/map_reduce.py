@@ -40,9 +40,16 @@ class MapReduceProcessor:
         final_answer = await reduce_func(filtered_results, question)
 
         used_entities = [result.get("source") for result in filtered_results if result.get("source")]
+        used_relationships = []
+        used_chunks = []
+
+        for result in filtered_results:
+            used_relationships.extend(result.get("used_relationships", []))
+            used_chunks.extend(result.get("used_chunks", []))
+
         final_answer["used_entities"] = used_entities
-        final_answer.setdefault("used_relationships", [])
-        final_answer.setdefault("used_chunks", [])
+        final_answer["used_relationships"] = used_relationships
+        final_answer["used_chunks"] = used_chunks
 
         return final_answer
 
@@ -70,7 +77,9 @@ class MapReduceProcessor:
             return {
                 "answer": answer,
                 "helpfulness": helpfulness,
-                "source": source
+                "source": source,
+                "used_relationships": response_json.get("used_relationships", []),
+                "used_chunks": response_json.get("used_chunks", [])
             }
 
         except Exception as e:
@@ -80,7 +89,9 @@ class MapReduceProcessor:
             return {
                 "answer": f"Error processing item: {str(e)}",
                 "helpfulness": 0.0,
-                "source": source_id
+                "source": source_id,
+                "used_relationships": [],
+                "used_chunks": []
             }
 
     @staticmethod
@@ -122,7 +133,6 @@ class MapReduceProcessor:
             f"DO NOT include keys like \"main_topics\", \"details\", or any text outside the JSON block.\n"
             f"\n### Community Responses:\n{formatted_answers}"
         )
-
 
         try:
             response_json = await llm_client.extract_json(prompt)

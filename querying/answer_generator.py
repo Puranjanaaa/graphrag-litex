@@ -1,5 +1,3 @@
-# ✅ File: querying/answer_generator.py
-
 from typing import List, Dict, Any, Optional
 import random
 from config import GraphRAGConfig
@@ -57,10 +55,8 @@ class AnswerGenerator:
             reduce_func=self._reduce_community_answers
         )
 
+        # Fill in entities based on selected IDs
         result.setdefault("used_entities", [s.get("id") for s in selected])
-        result.setdefault("used_relationships", [])
-        result.setdefault("used_chunks", [])
-
         return result
 
     def _get_community_summaries(
@@ -100,7 +96,9 @@ class AnswerGenerator:
         return {
             "answer": json_response.get("answer", ""),
             "helpfulness": json_response.get("helpfulness", 0),
-            "source": community_id
+            "source": community_id,
+            "used_relationships": json_response.get("used_relationships", []),
+            "used_chunks": json_response.get("used_chunks", [])
         }
 
     async def _reduce_community_answers(
@@ -114,18 +112,9 @@ class AnswerGenerator:
             formatted += f"\n\nCommunity Answer {i+1} ({res.get('source', '?')}):\n"
             formatted += res.get("answer", "No answer")
 
-        prompt = (
-            f"You are a JSON-generating assistant. Answer the following question using the provided community summaries.\n\n"
-            f"Your response MUST be a JSON object with:\n"
-            f"- \"answer\" (string): a markdown-formatted summary answer.\n"
-            f"- \"topics\" (list): list of topic objects, each with:\n"
-            f"    - \"topic\": short title\n"
-            f"    - \"description\": brief explanation\n"
-            f"    - \"sources\": list of community labels (e.g., [\"Community Answer 1\"])\n"
-            f"- \"confidence\" (float, optional)\n\n"
-            f"Respond ONLY with valid JSON — no commentary, thinking, or explanations outside the JSON block.\n\n"
-            f"Question:\n{question}\n\n"
-            f"Community Answers:\n{formatted}"
+        prompt = PromptTemplates.format_global_answer_prompt(
+            question=question,
+            community_answers=formatted
         )
 
         response_json = await self.llm_client.extract_json(prompt)
@@ -144,12 +133,19 @@ class AnswerGenerator:
             print("⚠️ [WARNING] LLM returned invalid or missing 'topics'.")
             topics = []
 
+        used_relationships = []
+        used_chunks = []
+
+        for res in mapped_results:
+            used_relationships.extend(res.get("used_relationships", []))
+            used_chunks.extend(res.get("used_chunks", []))
+
         return {
             "answer": answer_text,
             "topics": topics,
-            "used_entities": [],
-            "used_relationships": [],
-            "used_chunks": []
+            "used_entities": [res.get("source") for res in mapped_results if "source" in res],
+            "used_relationships": list(set(used_relationships)),
+            "used_chunks": list(set(used_chunks))
         }
 
     def _format_summary_as_report(self, community_id: str, summary: Dict[str, Any]) -> str:
@@ -157,7 +153,8 @@ class AnswerGenerator:
         finding_text = ""
         for i, f in enumerate(findings):
             if isinstance(f, dict):
-                finding_text += f"\nFinding {i+1}: {f.get('summary', '')}\n{f.get('explanation', '')}\n"
+                chunk_id = f.get("chunk_id", f"chunk_{i}")
+                finding_text += f"\n[Chunk ID: {chunk_id}] Finding {i+1}: {f.get('summary', '')}\n{f.get('explanation', '')}\n"
 
         return (
             f"Report ID: {community_id}\n"

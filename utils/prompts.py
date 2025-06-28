@@ -173,10 +173,13 @@ Return a JSON object with the following schema:
 {{
   "helpfulness": <integer score 0-100>,
   "topics": [<string>, ...],
-  "answer": <detailed markdown answer>
+  "answer": <detailed markdown answer>,
+  "used_relationships": [<relationship_id>, ...],  // IDs of relationships relevant to the answer
+  "used_chunks": [<chunk_id>, ...]  // IDs of text or data chunks used in generating the answer
 }}
 Only return the JSON. Do not include extra text.
 """
+
 
 GLOBAL_ANSWER_PROMPT = """
 You are a JSON-generating assistant. Answer the following question using the provided community summaries.
