@@ -1,4 +1,4 @@
-### File: querying/answer_generator.py
+# ✅ File: querying/answer_generator.py
 
 from typing import List, Dict, Any, Optional
 import random
@@ -8,6 +8,7 @@ from utils.llm_client import LLMClient
 from utils.prompts import PromptTemplates
 from querying.map_reduce import MapReduceProcessor
 from utils.embedding_utils import EmbeddingUtils
+import json
 
 
 class AnswerGenerator:
@@ -56,7 +57,6 @@ class AnswerGenerator:
             reduce_func=self._reduce_community_answers
         )
 
-        # Attach evidence IDs
         result.setdefault("used_entities", [s.get("id") for s in selected])
         result.setdefault("used_relationships", [])
         result.setdefault("used_chunks", [])
@@ -114,19 +114,42 @@ class AnswerGenerator:
             formatted += f"\n\nCommunity Answer {i+1} ({res.get('source', '?')}):\n"
             formatted += res.get("answer", "No answer")
 
-        prompt = PromptTemplates.format_global_answer_prompt(
-            question=question,
-            community_answers=formatted
+        prompt = (
+            f"You are a JSON-generating assistant. Answer the following question using the provided community summaries.\n\n"
+            f"Your response MUST be a JSON object with:\n"
+            f"- \"answer\" (string): a markdown-formatted summary answer.\n"
+            f"- \"topics\" (list): list of topic objects, each with:\n"
+            f"    - \"topic\": short title\n"
+            f"    - \"description\": brief explanation\n"
+            f"    - \"sources\": list of community labels (e.g., [\"Community Answer 1\"])\n"
+            f"- \"confidence\" (float, optional)\n\n"
+            f"Respond ONLY with valid JSON — no commentary, thinking, or explanations outside the JSON block.\n\n"
+            f"Question:\n{question}\n\n"
+            f"Community Answers:\n{formatted}"
         )
 
         response_json = await self.llm_client.extract_json(prompt)
 
+        print("[DEBUG] Full structured reduce response:")
+        print(json.dumps(response_json, indent=2))
+
+        answer_text = response_json.get("answer")
+        topics = response_json.get("topics")
+
+        if not answer_text or not isinstance(answer_text, str) or not answer_text.strip():
+            print("⚠️ [WARNING] LLM returned no valid 'answer'.")
+            answer_text = "⚠️ Final structured answer was empty or missing."
+
+        if not isinstance(topics, list):
+            print("⚠️ [WARNING] LLM returned invalid or missing 'topics'.")
+            topics = []
+
         return {
-            "answer": response_json.get("answer", "No answer"),
-            "topics": response_json.get("main_topics", []),
+            "answer": answer_text,
+            "topics": topics,
             "used_entities": [],
             "used_relationships": [],
-            "used_chunks": [],
+            "used_chunks": []
         }
 
     def _format_summary_as_report(self, community_id: str, summary: Dict[str, Any]) -> str:

@@ -107,29 +107,22 @@ class MapReduceProcessor:
             formatted_answers += result.get("answer", "No answer")
 
         prompt = (
-            f"You are a helpful assistant summarizing answers to the following question: {question}\n"
-            f"Use the community responses provided below to synthesize a coherent and informative markdown-formatted answer.\n"
-            f"\nPlease return a JSON object with:\n"
-            f"1. \"answer\": A markdown-formatted summary that directly answers the question.\n"
-            f"2. \"topics\": A list of key topics, each with:\n"
-            f"    - topic: title\n"
-            f"    - description: a short explanation\n"
-            f"    - sources: a list of community answer labels like \"Community Answer 1\"\n"
-            f"3. \"confidence\": A float between 0.0 and 1.0\n"
-            f"\nJSON Format:\n"
-            f"{{\n"
-            f"  \"answer\": \"<markdown-formatted answer>\",\n"
-            f"  \"topics\": [\n"
-            f"    {{\n"
-            f"      \"topic\": \"<title>\",\n"
-            f"      \"description\": \"<short explanation>\",\n"
-            f"      \"sources\": [\"Community Answer 1\", \"Community Answer 2\"]\n"
-            f"    }}\n"
-            f"  ],\n"
-            f"  \"confidence\": <float>\n"
-            f"}}\n"
-            f"\nCommunity Responses:\n{formatted_answers}"
+            f"You are a helpful assistant summarizing answers to the following question:\n"
+            f"### Question:\n{question}\n\n"
+            f"### Task:\n"
+            f"Summarize the key findings from the community responses below in a markdown-formatted answer.\n"
+            f"\nReturn only a **strictly valid JSON** object with the following keys:\n"
+            f"1. \"answer\": (required) A markdown-formatted answer that summarizes the findings related to the question.\n"
+            f"2. \"topics\": (required) A list of key topics, each containing:\n"
+            f"    - topic: title of the topic.\n"
+            f"    - description: a short explanation (not 'details').\n"
+            f"    - sources: a list of community labels (e.g., [\"Community Answer 1\"]).\n"
+            f"3. \"confidence\": (optional) A float between 0 and 1 estimating confidence.\n"
+            f"\nStrictly use these field names: \"answer\", \"topics\", \"sources\".\n"
+            f"DO NOT include keys like \"main_topics\", \"details\", or any text outside the JSON block.\n"
+            f"\n### Community Responses:\n{formatted_answers}"
         )
+
 
         try:
             response_json = await llm_client.extract_json(prompt)

@@ -179,30 +179,25 @@ Only return the JSON. Do not include extra text.
 """
 
 GLOBAL_ANSWER_PROMPT = """
----Role---
-You are a helpful assistant responding to questions about a comprehensive dataset.
+You are a JSON-generating assistant. Answer the following question using the provided community summaries.
 
----Goal---
-Generate a response that answers the following question:
+Your response MUST be a JSON object with:
+- "answer" (string): a markdown-formatted summary answer.
+- "topics" (list): list of topic objects, each with:
+    - "topic": short title
+    - "description": brief explanation
+    - "sources": list of community labels (e.g., ["Community Answer 1"])
+- "confidence" (float, optional)
 
+Respond ONLY with valid JSON — no commentary, thinking, or explanations outside the JSON block.
+
+Question:
 {question}
 
-Synthesize all relevant information from the community answers provided below. These answers contain different perspectives on the question from analysis of different parts of the dataset.
-
-If you don't know the answer based on the provided information, just say so. Do not make anything up.
-
-The response should be comprehensive, well-structured, and formatted in markdown. Include sections, bullet points, or other formatting as appropriate to make the information clear and accessible.
-
-Preserve all data references from the community answers using the format:
-"This is a supported claim [Data: Reports (2, 7, 34, 46, 64, +more)]."
-
-Create an answer that gives the most complete picture possible based on all the community answers. Focus on presenting diverse perspectives and comprehensive coverage of the topic.
-
----Community Answers---
+Community Answers:
 {community_answers}
-
-Generate a markdown-formatted response that answers the question comprehensively:
 """
+
 
 class PromptTemplates:
     """
