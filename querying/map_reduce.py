@@ -1,5 +1,3 @@
-### File: querying/map_reduce.py
-
 from typing import List, Dict, Any, Tuple, Callable, TypeVar, Awaitable
 from config import GraphRAGConfig
 from utils.llm_client import LLMClient
@@ -66,7 +64,7 @@ class MapReduceProcessor:
 
             response_json = await llm_client.extract_json(prompt)
 
-            answer = response_json.get("answer", "No answer returned")
+            answer = response_json.get("answer", "")
             helpfulness = float(response_json.get("helpfulness", 0))
 
             return {
@@ -105,29 +103,43 @@ class MapReduceProcessor:
 
         formatted_answers = ""
         for i, result in enumerate(sorted_results):
-            formatted_answers += f"\n\nAnswer {i+1} (Helpfulness: {result.get('helpfulness', 0)}):\n"
+            formatted_answers += f"\n\nCommunity Answer {i+1} ({result.get('source', '?')}):\n"
             formatted_answers += result.get("answer", "No answer")
 
         prompt = (
-            f"You're an assistant. Return the following JSON structure only:\n"
+            f"You are a helpful assistant summarizing answers to the following question: {question}\n"
+            f"Use the community responses provided below to synthesize a coherent and informative markdown-formatted answer.\n"
+            f"\nPlease return a JSON object with:\n"
+            f"1. \"answer\": A markdown-formatted summary that directly answers the question.\n"
+            f"2. \"topics\": A list of key topics, each with:\n"
+            f"    - topic: title\n"
+            f"    - description: a short explanation\n"
+            f"    - sources: a list of community answer labels like \"Community Answer 1\"\n"
+            f"3. \"confidence\": A float between 0.0 and 1.0\n"
+            f"\nJSON Format:\n"
             f"{{\n"
-            f"  \"question\": \"{question}\",\n"
-            f"  \"main_topics\": [\"<topic1>\", \"<topic2>\", ...],\n"
-            f"  \"summary\": \"<markdown summary answer>\",\n"
-            f"  \"confidence\": 0.0 - 1.0\n"
-            f"}}\n\n"
-            f"Based only on these community answers:\n{formatted_answers}\n"
+            f"  \"answer\": \"<markdown-formatted answer>\",\n"
+            f"  \"topics\": [\n"
+            f"    {{\n"
+            f"      \"topic\": \"<title>\",\n"
+            f"      \"description\": \"<short explanation>\",\n"
+            f"      \"sources\": [\"Community Answer 1\", \"Community Answer 2\"]\n"
+            f"    }}\n"
+            f"  ],\n"
+            f"  \"confidence\": <float>\n"
+            f"}}\n"
+            f"\nCommunity Responses:\n{formatted_answers}"
         )
 
         try:
             response_json = await llm_client.extract_json(prompt)
 
-            if not all(k in response_json for k in ["question", "main_topics", "summary", "confidence"]):
+            if not all(k in response_json for k in ["answer", "topics"]):
                 raise ValueError("Missing required keys in structured answer")
 
             return {
-                "answer": response_json.get("summary", ""),
-                "topics": response_json.get("main_topics", []),
+                "answer": response_json.get("answer", ""),
+                "topics": response_json.get("topics", []),
                 "used_entities": [],
                 "used_relationships": [],
                 "used_chunks": []

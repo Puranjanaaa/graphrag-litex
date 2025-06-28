@@ -122,7 +122,7 @@ class AnswerGenerator:
         response_json = await self.llm_client.extract_json(prompt)
 
         return {
-            "answer": response_json.get("summary", "No answer"),
+            "answer": response_json.get("answer", "No answer"),
             "topics": response_json.get("main_topics", []),
             "used_entities": [],
             "used_relationships": [],
