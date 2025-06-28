@@ -1,5 +1,3 @@
-### File: graphrag_lite_x.py
-
 #!/usr/bin/env python3
 
 import os
@@ -98,30 +96,33 @@ async def run_simple_graphrag(
         graph_rag.save(save_directory)
 
     print("\n=== Answering Questions with Simple GraphRAG ===\n")
+
+    tasks = [
+        graph_rag.answer_generator.generate_answer(
+            question=question,
+            kg=graph_rag.knowledge_graph,
+            community_level=community_level
+        )
+        for question in questions
+    ]
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
     answers = []
-    for i, question in enumerate(questions):
+    for i, (question, result) in enumerate(zip(questions, results)):
         print(f"\nQuestion {i+1}: {question}")
         print("-" * 80)
 
-        try:
-            logger.info(f"Generating answer for question: {question}")
-
-            structured_answer = await graph_rag.answer_generator.generate_answer(
-                question=question,
-                kg=graph_rag.knowledge_graph,
-                community_level=community_level
-            )
-
+        if isinstance(result, Exception):
+            logger.error(f"Error generating answer for question '{question}': {result}")
+            print(f"\nError generating answer: {result}")
+            print("=" * 80)
+            answers.append({"error": str(result)})
+        else:
             print("\nStructured Answer:")
-            print(json.dumps(structured_answer, indent=2))
+            print(json.dumps(result, indent=2))
             print("=" * 80)
-
-            answers.append(structured_answer)
-        except Exception as e:
-            logger.error(f"Error generating answer: {e}")
-            print(f"\nError generating answer: {e}")
-            print("=" * 80)
-            answers.append({"error": str(e)})
+            answers.append(result)
 
     return answers
 

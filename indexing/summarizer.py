@@ -90,23 +90,25 @@ Only return the JSON. Do not include extra text, markdown, or comments.
                 print(f"[DEBUG] Starting batch processing of {len(tasks)} summarization tasks")
 
                 try:
-                    summaries = await asyncio.gather(*tasks)
+                    summaries = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    for i, community_id in enumerate([data["community_id"] for data in community_data_list]):
-                        summary = summaries[i] if i < len(summaries) else None
+                    for i, (community_data, result) in enumerate(zip(community_data_list, summaries)):
+                        community_id = community_data["community_id"]
 
-                        if not isinstance(summary, dict):
-                            print(f"[DEBUG] ERROR - Summary for {community_id} is not a dictionary: {type(summary)}")
+                        if isinstance(result, Exception):
+                            print(f"[DEBUG] ERROR summarizing community {community_id}: {result}")
                             summary = {
                                 "title": f"Community {community_id}",
-                                "summary": f"Error processing community data",
+                                "summary": "Error in summarization",
                                 "rating": 5.0,
-                                "rating explanation": "Error in processing",
+                                "rating explanation": f"Exception during summarization: {str(result)}",
                                 "findings": [{
-                                    "summary": "Processing error",
-                                    "explanation": f"Expected dictionary, got {type(summary)}"
+                                    "summary": "Summarization Error",
+                                    "explanation": str(result)
                                 }]
                             }
+                        else:
+                            summary = result
 
                         community_summaries[community_id] = summary
                         print(f"[DEBUG] Added summary for community {community_id}: {summary.get('title', 'No title')}")
@@ -124,7 +126,7 @@ Only return the JSON. Do not include extra text, markdown, or comments.
 
         print(f"Community summarization complete. Generated {len(community_summaries)} summaries")
         return community_summaries
-
+    
     def _prepare_input_text(
         self,
         community_data: Dict[str, Any],
