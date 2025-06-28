@@ -165,189 +165,77 @@ Output:
 """
 
 COMMUNITY_ANSWER_PROMPT = """
----Role---
-You are a helpful assistant responding to questions about a dataset by synthesizing perspectives from multiple analysts.
+Your task is to analyze the following report and return a structured JSON object.
 
----Goal---
-Generate a response that answers the following question:
+{report}
 
-{question}
-
-Analyze all the reports from multiple analysts who focused on different parts of the dataset, and incorporate any relevant general knowledge. Note that the analysts' reports provided below are ranked in the descending order of helpfulness.
-
-If you don't know the answer, just say so. Do not make anything up.
-
-The final response should remove all irrelevant information from the analysts' reports and merge the cleaned information into a comprehensive answer that provides explanations of all the key points and implications.
-
-Add sections and commentary to the response as appropriate. Style the response in markdown.
-
-The response shall preserve the original meaning and use of modal verbs such as "shall", "may" or "will".
-
-The response should also preserve all the data references previously included in the analysts' reports, but do not mention the roles of multiple analysts in the analysis process.
-
-Do not list more than 5 record ids in a single reference. Instead, list the top 5 most relevant record ids and add "+more" to indicate that there are more.
-
-For example:
-"Person X is the owner of Company Y and subject to many allegations of wrongdoing [Data: Reports (2, 7, 34, 46, 64, +more)]. He is also CEO of company X [Data: Reports (1, 3)]"
-
-where 1, 2, 3, 7, 34, 46, and 64 represent the id (not the index) of the relevant data record.
-
-Do not include information where the supporting evidence for it is not provided.
-
-At the beginning of your response, generate an integer score between 0-100 that indicates how helpful this response is in answering the user's question. Return the score in this format: <ANSWER HELPFULNESS>score value</ANSWER HELPFULNESS>.
-
----Analyst Reports---
-{report_data}
-
-Generate a markdown-formatted response that answers the question comprehensively:
+Return a JSON object with the following schema:
+{{
+  "helpfulness": <integer score 0-100>,
+  "topics": [<string>, ...],
+  "answer": <detailed markdown answer>,
+  "used_relationships": [<relationship_id>, ...],  // IDs of relationships relevant to the answer
+  "used_chunks": [<chunk_id>, ...]  // IDs of text or data chunks used in generating the answer
+}}
+Only return the JSON. Do not include extra text.
 """
+
 
 GLOBAL_ANSWER_PROMPT = """
----Role---
-You are a helpful assistant responding to questions about a comprehensive dataset.
+You are a JSON-generating assistant. Answer the following question using the provided community summaries.
 
----Goal---
-Generate a response that answers the following question:
+Your response MUST be a JSON object with:
+- "answer" (string): a markdown-formatted summary answer.
+- "topics" (list): list of topic objects, each with:
+    - "topic": short title
+    - "description": brief explanation
+    - "sources": list of community labels (e.g., ["Community Answer 1"])
+- "confidence" (float, optional)
 
+Respond ONLY with valid JSON — no commentary, thinking, or explanations outside the JSON block.
+
+Question:
 {question}
 
-Synthesize all relevant information from the community answers provided below. These answers contain different perspectives on the question from analysis of different parts of the dataset.
-
-If you don't know the answer based on the provided information, just say so. Do not make anything up.
-
-The response should be comprehensive, well-structured, and formatted in markdown. Include sections, bullet points, or other formatting as appropriate to make the information clear and accessible.
-
-Preserve all data references from the community answers using the format:
-"This is a supported claim [Data: Reports (2, 7, 34, 46, 64, +more)]."
-
-Create an answer that gives the most complete picture possible based on all the community answers. Focus on presenting diverse perspectives and comprehensive coverage of the topic.
-
----Community Answers---
+Community Answers:
 {community_answers}
-
-Generate a markdown-formatted response that answers the question comprehensively:
 """
+
 
 class PromptTemplates:
     """
     Provides templating functionality for LLM prompts.
     """
-    
-    @staticmethod
-    def format_entity_extraction_prompt(text_chunk: str, entity_types: List[str]) -> str:
-        """
-        Format the entity extraction prompt.
-        
-        Args:
-            text_chunk: The text chunk to extract entities from
-            entity_types: List of entity types to extract
-            
-        Returns:
-            Formatted prompt
-        """
-        return ENTITY_EXTRACTION_PROMPT.format(
-            text_chunk=text_chunk,
-            entity_types=",".join(entity_types)
-        )
-    
-    @staticmethod
-    def format_entity_reflection_prompt(text_chunk: str, extracted_entities: str, entity_types: List[str]) -> str:
-        """
-        Format the entity reflection prompt.
-        
-        Args:
-            text_chunk: The text chunk to extract entities from
-            extracted_entities: The previously extracted entities
-            entity_types: List of entity types to extract
-            
-        Returns:
-            Formatted prompt
-        """
-        return ENTITY_REFLECTION_PROMPT.format(
-            text_chunk=text_chunk,
-            extracted_entities=extracted_entities,
-            entity_types=",".join(entity_types)
-        )
-    
-    @staticmethod
-    def format_entity_reflection_continuation_prompt(text_chunk: str, extracted_entities: str) -> str:
-        """
-        Format the entity reflection continuation prompt.
-        
-        Args:
-            text_chunk: The text chunk to extract entities from
-            extracted_entities: The previously extracted entities
-            
-        Returns:
-            Formatted prompt
-        """
-        return ENTITY_REFLECTION_CONTINUATION_PROMPT.format(
-            text_chunk=text_chunk,
-            extracted_entities=extracted_entities
-        )
-    
-    @staticmethod
-    def format_claim_extraction_prompt(text_chunk: str, entity_names: List[str]) -> str:
-        """
-        Format the claim extraction prompt.
-        
-        Args:
-            text_chunk: The text chunk to extract claims from
-            entity_names: List of entity names to extract claims for
-            
-        Returns:
-            Formatted prompt
-        """
-        return CLAIM_EXTRACTION_PROMPT.format(
-            text_chunk=text_chunk,
-            entity_names=", ".join(entity_names)
-        )
-    
-    @staticmethod
-    def format_community_summary_prompt(input_text: str) -> str:
-        """
-        Format the community summary prompt.
-        
-        Args:
-            input_text: The input text for community summarization
-            
-        Returns:
-            Formatted prompt
-        """
-        return COMMUNITY_SUMMARY_PROMPT.format(
-            input_text=input_text
-        )
-    
+
     @staticmethod
     def format_community_answer_prompt(question: str, report_data: str) -> str:
-        """
-        Format the community answer prompt.
-        
-        Args:
-            question: The user question
-            report_data: The community report data
-            
-        Returns:
-            Formatted prompt
-        """
         return COMMUNITY_ANSWER_PROMPT.format(
             question=question,
-            report_data=report_data
+            report=report_data
         )
-    
+
     @staticmethod
     def format_global_answer_prompt(question: str, community_answers: str) -> str:
-        """
-        Format the global answer prompt.
-        
-        Args:
-            question: The user question
-            community_answers: The community answers
-            
-        Returns:
-            Formatted prompt
-        """
         return GLOBAL_ANSWER_PROMPT.format(
             question=question,
             community_answers=community_answers
         )
+
+    @staticmethod
+    def format_community_summary_prompt(input_text: str) -> str:
+        return f"""You are an expert analyst. Analyze the following structured information from a knowledge graph community and produce a JSON summary with the following fields:
+
+    - title (string): A short, informative title for the community.
+    - summary (string): A high-level summary of what this community is about.
+    - rating (number between 0-10): How important or central is this community?
+    - rating explanation (string): Justify your rating briefly.
+    - findings (list of objects): Each with:
+        - summary (string): Short finding
+        - explanation (string): Explanation of the finding
+
+    Respond only in JSON format.
+
+    Community Data:
+    -----------------------
+    {input_text}
+    """

@@ -5,7 +5,6 @@ from typing import Dict, Any
 from config import GraphRAGConfig
 from models.knowledge_graph import KnowledgeGraph
 from utils.llm_client import LLMClient
-from utils.prompts import PromptTemplates
 import json
 import asyncio
 
@@ -23,7 +22,22 @@ class CommunitySummarizer:
     ) -> Dict[str, Any]:
         community_id = community_data["community_id"]
         input_text = self._prepare_input_text(community_data, kg, community_summaries)
-        prompt = PromptTemplates.format_community_summary_prompt(input_text)
+
+        prompt = f"""
+Your task is to analyze the following report and return a structured JSON object.
+
+{input_text}
+
+Return a JSON object with the following schema:
+{{
+  "title": <string>,
+  "summary": <string>,
+  "rating": <float score from 0 to 10>,
+  "rating explanation": <string>,
+  "findings": [{{"summary": <string>, "explanation": <string>}}, ...]
+}}
+Only return the JSON. Do not include extra text, markdown, or comments.
+"""
 
         try:
             summary_json = await self.llm_client.extract_json(prompt)

@@ -1,5 +1,5 @@
 """
-Community detection algorithms for GraphRAG using Infomap.
+Community detection algorithms for GraphRAG using Infomap or Louvain.
 """
 from typing import List, Dict, Any
 import networkx as nx
@@ -11,7 +11,6 @@ try:
     INFOMAP_AVAILABLE = True
 except ImportError:
     INFOMAP_AVAILABLE = False
-    # Fallback to Louvain if Infomap is not available
     try:
         import community as community_louvain
         LOUVAIN_AVAILABLE = True
@@ -21,574 +20,245 @@ except ImportError:
 from config import GraphRAGConfig
 from models.knowledge_graph import KnowledgeGraph
 
+
 class CommunityDetector:
     """
-    Detects communities in the knowledge graph using Infomap algorithm.
+    Detects communities using Infomap or Louvain and builds hierarchical structure.
     """
-    
+
     def __init__(self, config: GraphRAGConfig):
-        """
-        Initialize the community detector.
-        
-        Args:
-            config: The GraphRAG configuration
-        """
         self.config = config
         self.resolution = getattr(config, 'community_resolution', 1.0)
         self.min_community_size = getattr(config, 'min_community_size', 3)
         self.use_weights = getattr(config, 'use_edge_weights', True)
         self.directed = getattr(config, 'directed_graph', True)
         self.hierarchical_levels = getattr(config, 'hierarchical_levels', 3)
-        
-        # Infomap specific parameters
         self.num_trials = getattr(config, 'infomap_trials', 10)
         self.markov_time = getattr(config, 'markov_time', 1.0)
-        
+
         if not INFOMAP_AVAILABLE:
-            print("Warning: Infomap not available, falling back to Louvain algorithm")
-    
+            print("Warning: Infomap not available, falling back to Louvain.")
+
     def detect_communities(self, kg: KnowledgeGraph) -> Dict[str, Dict[str, Any]]:
         """
-        Detect communities in the knowledge graph using Infomap.
-        
-        Args:
-            kg: The knowledge graph
-            
-        Returns:
-            Dictionary mapping community IDs to community information
+        Run hierarchical community detection and return structured community dict.
         """
-        # Get the NetworkX graph
         graph = kg.get_graph()
-        
+
         if INFOMAP_AVAILABLE:
-            # Detect communities using Infomap algorithm
             communities = self._detect_with_infomap(graph, kg)
         elif LOUVAIN_AVAILABLE:
-            # Fallback to Louvain
             communities = self._detect_with_louvain(graph)
         else:
-            raise ImportError("Neither Infomap nor python-louvain is available")
-        
-        # Ensure minimum community size
+            raise ImportError("Neither Infomap nor Louvain is available")
+
         communities = self._enforce_min_community_size(communities)
-        
-        # Create a hierarchical structure
         hierarchical_communities = self._create_hierarchy(communities, graph)
-        
         return hierarchical_communities
-    
+
     def _detect_with_infomap(self, graph: nx.Graph, kg: KnowledgeGraph) -> Dict[str, List[str]]:
-        """
-        Detect communities using the Infomap algorithm.
-        
-        Args:
-            graph: The NetworkX graph
-            kg: The knowledge graph (for accessing relationship weights)
-            
-        Returns:
-            Dictionary mapping community IDs to lists of node IDs
-        """
-        if len(graph) == 0:
-            return {}
-        
-        # Create Infomap instance
-        infomap_args = []
-        
-        # Configure for directed or undirected graph
+        infomap_args = ["--two-level", "--silent"]
         if self.directed and graph.is_directed():
             infomap_args.append("--directed")
-        
-        # Add other parameters
-        infomap_args.extend([
-            "--two-level",  # Enable hierarchical detection
-            "--silent"  # Suppress output
-        ])
-        
+
         im = infomap.Infomap(" ".join(infomap_args))
-        
-        # Set parameters directly on the Infomap object
-        if hasattr(im, 'numTrials'):
-            im.numTrials = self.num_trials
-        if hasattr(im, 'markovTime'):
-            im.markovTime = self.markov_time
-        
-        # Create node ID mapping
-        node_to_id = {node: idx for idx, node in enumerate(graph.nodes())}
-        id_to_node = {idx: node for node, idx in node_to_id.items()}
-        
-        # Add nodes to Infomap
+        im.numTrials = self.num_trials
+        im.markovTime = self.markov_time
+
+        node_to_id = {node: i for i, node in enumerate(graph.nodes())}
+        id_to_node = {i: node for node, i in node_to_id.items()}
+
         for node in graph.nodes():
             im.addNode(node_to_id[node])
-        
-        # Add edges with weights
         for source, target, edge_data in graph.edges(data=True):
-            source_id = node_to_id[source]
-            target_id = node_to_id[target]
-            
-            # Get weight from edge data or relationship
-            weight = 1.0
-            if self.use_weights and 'weight' in edge_data:
-                weight = float(edge_data['weight'])
-            elif self.use_weights:
-                # Try to get weight from knowledge graph relationships
+            weight = float(edge_data.get('weight', 1.0))
+            if self.use_weights and weight == 1.0:
                 rel_key = f"{source}_{target}"
                 if rel_key in kg.relationships:
                     weight = kg.relationships[rel_key].strength
-                # Try reverse direction for undirected graphs
                 elif not self.directed:
-                    rel_key_reverse = f"{target}_{source}"
-                    if rel_key_reverse in kg.relationships:
-                        weight = kg.relationships[rel_key_reverse].strength
-            
-            im.addLink(source_id, target_id, weight)
-        
-        # Run the algorithm
+                    rel_key_rev = f"{target}_{source}"
+                    if rel_key_rev in kg.relationships:
+                        weight = kg.relationships[rel_key_rev].strength
+            im.addLink(node_to_id[source], node_to_id[target], weight)
+
         im.run()
-        
-        # Extract communities
+
         communities = defaultdict(list)
-        
         for node in im.tree:
             if node.isLeaf:
-                node_id = node.physicalId
-                module_id = node.moduleIndex()
-                original_node = id_to_node[node_id]
-                communities[str(module_id)].append(original_node)
-        
+                original_node = id_to_node[node.physicalId]
+                communities[str(node.moduleIndex())].append(original_node)
+
         return dict(communities)
-    
+
     def _detect_with_louvain(self, graph: nx.Graph) -> Dict[str, List[str]]:
-        """
-        Fallback: Detect communities using the Louvain algorithm.
-        
-        Args:
-            graph: The NetworkX graph
-            
-        Returns:
-            Dictionary mapping community IDs to lists of node IDs
-        """
-        if len(graph) == 0:
-            return {}
-            
-        # Apply Louvain algorithm
         partition = community_louvain.best_partition(graph, resolution=self.resolution)
-        
-        # Group nodes by community
         communities = defaultdict(list)
-        for node, community_id in partition.items():
-            communities[str(community_id)].append(node)
-        
+        for node, comm_id in partition.items():
+            communities[str(comm_id)].append(node)
         return dict(communities)
-    
-    def _detect_hierarchical_infomap(self, graph: nx.Graph, kg: KnowledgeGraph) -> Dict[int, Dict[str, List[str]]]:
-        """
-        Detect hierarchical communities using Infomap's multi-level detection.
-        
-        Args:
-            graph: The NetworkX graph
-            kg: The knowledge graph
-            
-        Returns:
-            Dictionary mapping levels to community structures
-        """
-        if not INFOMAP_AVAILABLE or len(graph) == 0:
-            return {}
-        
-        # Configure Infomap for hierarchical detection
-        infomap_args = [
-            "--tree",  # Enable hierarchical structure
-            "--silent"
-        ]
-        
-        if self.directed and graph.is_directed():
-            infomap_args.append("--directed")
-        
-        im = infomap.Infomap(" ".join(infomap_args))
-        
-        # Set parameters directly on the Infomap object
-        if hasattr(im, 'numTrials'):
-            im.numTrials = self.num_trials
-        
-        # Create node mapping
-        node_to_id = {node: idx for idx, node in enumerate(graph.nodes())}
-        id_to_node = {idx: node for node, idx in node_to_id.items()}
-        
-        # Add nodes and edges
-        for node in graph.nodes():
-            im.addNode(node_to_id[node])
-        
-        for source, target, edge_data in graph.edges(data=True):
-            source_id = node_to_id[source]
-            target_id = node_to_id[target]
-            
-            weight = 1.0
-            if self.use_weights and 'weight' in edge_data:
-                weight = float(edge_data['weight'])
-            elif self.use_weights:
-                rel_key = f"{source}_{target}"
-                if rel_key in kg.relationships:
-                    weight = kg.relationships[rel_key].strength
-                elif not self.directed:
-                    rel_key_reverse = f"{target}_{source}"
-                    if rel_key_reverse in kg.relationships:
-                        weight = kg.relationships[rel_key_reverse].strength
-            
-            im.addLink(source_id, target_id, weight)
-        
-        # Run algorithm
-        im.run()
-        
-        # Extract hierarchical structure
-        hierarchical_communities = defaultdict(lambda: defaultdict(list))
-        
-        for node in im.tree:
-            if node.isLeaf:
-                node_id = node.physicalId
-                original_node = id_to_node[node_id]
-                
-                # Build path from root to leaf
-                path = []
-                current = node
-                while current is not None:
-                    if hasattr(current, 'moduleIndex'):
-                        path.append(current.moduleIndex())
-                    current = current.parent
-                
-                path.reverse()
-                
-                # Add to appropriate levels
-                for level, module_id in enumerate(path):
-                    if level < self.hierarchical_levels:
-                        hierarchical_communities[level][str(module_id)].append(original_node)
-        
-        return dict(hierarchical_communities)
-    
+
     def _enforce_min_community_size(self, communities: Dict[str, List[str]]) -> Dict[str, List[str]]:
-        """
-        Ensure all communities meet the minimum size requirement.
-        
-        Args:
-            communities: Dictionary mapping community IDs to lists of node IDs
-            
-        Returns:
-            Updated communities with small ones merged
-        """
-        # Find small communities
-        small_communities = {}
-        valid_communities = {}
-        
-        for community_id, nodes in communities.items():
-            if len(nodes) < self.min_community_size:
-                small_communities[community_id] = nodes
-            else:
-                valid_communities[community_id] = nodes
-        
-        # If all communities are small, keep the largest one
-        if not valid_communities and small_communities:
-            largest_id = max(small_communities, key=lambda k: len(small_communities[k]))
-            valid_communities[largest_id] = small_communities[largest_id]
-            del small_communities[largest_id]
-        
-        # Merge small communities into the nearest valid community
-        if small_communities and valid_communities:
-            largest_id = max(valid_communities, key=lambda k: len(valid_communities[k]))
-            for nodes in small_communities.values():
-                valid_communities[largest_id].extend(nodes)
-        
-        return valid_communities
-    
-    def _create_hierarchy(
-        self, 
-        communities: Dict[str, List[str]], 
-        graph: nx.Graph
-    ) -> Dict[str, Dict[str, Any]]:
-        """
-        Create a hierarchical community structure.
-        
-        Args:
-            communities: Dictionary mapping community IDs to lists of node IDs
-            graph: The original NetworkX graph
-            
-        Returns:
-            Hierarchical community structure
-        """
-        hierarchical_communities = {}
-        
-        # Create the root level (C0)
-        root_level = {
-            "level": 0,
-            "communities": {}
+        small, valid = {}, {}
+        for cid, nodes in communities.items():
+            (valid if len(nodes) >= self.min_community_size else small)[cid] = nodes
+
+        if not valid and small:
+            largest = max(small, key=lambda k: len(small[k]))
+            valid[largest] = small.pop(largest)
+
+        if small:
+            target = max(valid, key=lambda k: len(valid[k]))
+            for nodes in small.values():
+                valid[target].extend(nodes)
+
+        return valid
+
+    def _create_hierarchy(self, communities: Dict[str, List[str]], graph: nx.Graph) -> Dict[str, Dict[str, Any]]:
+        hierarchy = {
+            "C0": {
+                "level": 0,
+                "communities": {}
+            }
         }
-        
-        for community_id, nodes in communities.items():
-            community_graph = graph.subgraph(nodes)
-            
-            # Calculate additional Infomap-specific metrics
-            flow_info = self._calculate_community_flow(nodes, graph)
-            
-            root_level["communities"][community_id] = {
+        for cid, nodes in communities.items():
+            subgraph = graph.subgraph(nodes)
+            metrics = self._calculate_community_flow(nodes, graph)
+            hierarchy["C0"]["communities"][cid] = {
                 "nodes": nodes,
                 "size": len(nodes),
-                "density": nx.density(community_graph) if len(nodes) > 1 else 0.0,
-                "flow": flow_info.get("flow", 0.0),
-                "description_length": flow_info.get("description_length", 0.0),
+                "density": nx.density(subgraph) if len(nodes) > 1 else 0.0,
+                **metrics,
                 "sub_communities": {}
             }
-        
-        hierarchical_communities["C0"] = root_level
-        
-        # Create sub-levels recursively using Infomap on subgraphs
-        self._create_sub_levels_infomap(hierarchical_communities, graph, 0, self.hierarchical_levels)
-        
-        return hierarchical_communities
-    
+
+        self._create_sub_levels_infomap(hierarchy, graph, 0, self.hierarchical_levels)
+        return hierarchy
+
     def _calculate_community_flow(self, nodes: List[str], graph: nx.Graph) -> Dict[str, float]:
-        """
-        Calculate flow-based metrics for a community (Infomap-inspired).
-        
-        Args:
-            nodes: List of node IDs in the community
-            graph: The graph
-            
-        Returns:
-            Dictionary with flow metrics
-        """
         if len(nodes) <= 1:
             return {"flow": 0.0, "description_length": 0.0}
-        
-        subgraph = graph.subgraph(nodes)
-        
-        # Calculate internal flow (proxy: internal degree sum)
-        internal_edges = subgraph.number_of_edges()
-        total_degree = sum(dict(subgraph.degree()).values())
-        
-        # Calculate external flow (edges leaving the community)
-        external_edges = 0
-        for node in nodes:
-            for neighbor in graph.neighbors(node):
-                if neighbor not in nodes:
-                    external_edges += 1
-        
-        # Flow metrics (simplified)
-        total_flow = internal_edges + external_edges
-        internal_flow = internal_edges / max(total_flow, 1)
-        
-        # Description length (simplified information-theoretic measure)
-        if total_flow > 0:
-            p_internal = internal_edges / total_flow
-            p_external = external_edges / total_flow
-            
-            description_length = 0
-            if p_internal > 0:
-                description_length -= p_internal * np.log2(p_internal)
-            if p_external > 0:
-                description_length -= p_external * np.log2(p_external)
+
+        sub = graph.subgraph(nodes)
+        internal = sub.number_of_edges()
+        external = sum(1 for n in nodes for nb in graph.neighbors(n) if nb not in nodes)
+        total = internal + external
+
+        if total > 0:
+            pi = internal / total
+            pe = external / total
+            dl = -sum(p * np.log2(p) for p in (pi, pe) if p > 0)
         else:
-            description_length = 0
-        
-        return {
-            "flow": internal_flow,
-            "description_length": description_length,
-            "internal_edges": internal_edges,
-            "external_edges": external_edges
-        }
-    
-    def _create_sub_levels_infomap(
-        self, 
-        hierarchical_communities: Dict[str, Dict[str, Any]], 
-        graph: nx.Graph, 
-        current_level: int, 
-        max_levels: int
-    ):
-        """
-        Recursively create sub-levels using Infomap on subgraphs.
-        
-        Args:
-            hierarchical_communities: Hierarchical community structure to update
-            graph: The original NetworkX graph
-            current_level: Current level in the hierarchy
-            max_levels: Maximum number of levels
-        """
+            pi = dl = 0.0
+
+        return {"flow": pi, "description_length": dl}
+
+    def _create_sub_levels_infomap(self, hierarchy, graph, current_level, max_levels):
         if current_level >= max_levels - 1 or not INFOMAP_AVAILABLE:
             return
-        
-        next_level = current_level + 1
-        level_key = f"C{next_level}"
-        
-        # Create the next level
-        hierarchical_communities[level_key] = {
-            "level": next_level,
+
+        next_level_key = f"C{current_level + 1}"
+        hierarchy[next_level_key] = {
+            "level": current_level + 1,
             "communities": {}
         }
-        
-        # Process each community at the current level
-        current_level_key = f"C{current_level}"
-        current_communities = hierarchical_communities[current_level_key]["communities"]
-        
-        community_counter = 0
-        
-        for community_id, community_data in current_communities.items():
-            nodes = community_data["nodes"]
-            
-            # If the community is too small, don't subdivide
+
+        counter = 0
+        for cid, cdata in hierarchy[f"C{current_level}"]["communities"].items():
+            nodes = cdata["nodes"]
             if len(nodes) <= self.min_community_size * 2:
-                # Project this community to the next level without subdivision
-                next_community_id = f"{next_level}_{community_counter}"
-                community_counter += 1
-                
-                hierarchical_communities[level_key]["communities"][next_community_id] = {
-                    "nodes": nodes,
-                    "size": len(nodes),
-                    "density": community_data["density"],
-                    "flow": community_data.get("flow", 0.0),
-                    "description_length": community_data.get("description_length", 0.0),
-                    "parent": community_id,
-                    "sub_communities": {}
+                next_id = f"{current_level+1}_{counter}"
+                hierarchy[next_level_key]["communities"][next_id] = {
+                    **cdata,
+                    "parent": cid
                 }
-                
-                # Update the current level to reference this child
-                current_communities[community_id]["sub_communities"][next_community_id] = len(nodes)
+                cdata["sub_communities"][next_id] = len(nodes)
+                counter += 1
                 continue
-            
-            # Extract the subgraph for this community
-            subgraph = graph.subgraph(nodes)
-            
-            # Run Infomap on the subgraph
-            sub_communities = self._detect_subgraph_communities(subgraph)
-            
-            # Add sub-communities to the next level
+
+            sub = graph.subgraph(nodes)
+            sub_communities = self._detect_subgraph_communities(sub)
+
             for sub_nodes in sub_communities.values():
                 if len(sub_nodes) >= self.min_community_size:
-                    next_community_id = f"{next_level}_{community_counter}"
-                    community_counter += 1
-                    
-                    sub_subgraph = subgraph.subgraph(sub_nodes)
-                    flow_info = self._calculate_community_flow(sub_nodes, graph)
-                    
-                    hierarchical_communities[level_key]["communities"][next_community_id] = {
+                    next_id = f"{current_level+1}_{counter}"
+                    metrics = self._calculate_community_flow(sub_nodes, graph)
+                    hierarchy[next_level_key]["communities"][next_id] = {
                         "nodes": sub_nodes,
                         "size": len(sub_nodes),
-                        "density": nx.density(sub_subgraph) if len(sub_nodes) > 1 else 0.0,
-                        "flow": flow_info.get("flow", 0.0),
-                        "description_length": flow_info.get("description_length", 0.0),
-                        "parent": community_id,
+                        "density": nx.density(graph.subgraph(sub_nodes)) if len(sub_nodes) > 1 else 0.0,
+                        **metrics,
+                        "parent": cid,
                         "sub_communities": {}
                     }
-                    
-                    # Update the current level to reference this child
-                    current_communities[community_id]["sub_communities"][next_community_id] = len(sub_nodes)
-        
-        # Recursively process the next level
-        self._create_sub_levels_infomap(hierarchical_communities, graph, next_level, max_levels)
-    
+                    cdata["sub_communities"][next_id] = len(sub_nodes)
+                    counter += 1
+
+        self._create_sub_levels_infomap(hierarchy, graph, current_level + 1, max_levels)
+
     def _detect_subgraph_communities(self, subgraph: nx.Graph) -> Dict[str, List[str]]:
-        """
-        Detect communities in a subgraph using Infomap.
-        
-        Args:
-            subgraph: The subgraph to analyze
-            
-        Returns:
-            Dictionary mapping community IDs to node lists
-        """
         if not INFOMAP_AVAILABLE or len(subgraph) <= self.min_community_size:
-            # Return single community containing all nodes
             return {"0": list(subgraph.nodes())}
-        
-        # Configure Infomap for subgraph
+
         im = infomap.Infomap("--two-level --silent")
-        
-        # Set parameters directly on the Infomap object
-        if hasattr(im, 'numTrials'):
-            im.numTrials = min(self.num_trials, 5)  # Fewer trials for subgraphs
-        
-        # Create node mapping for subgraph
+        im.numTrials = min(self.num_trials, 5)
         node_to_id = {node: idx for idx, node in enumerate(subgraph.nodes())}
         id_to_node = {idx: node for node, idx in node_to_id.items()}
-        
-        # Add nodes and edges
-        for node in subgraph.nodes():
-            im.addNode(node_to_id[node])
-        
-        for source, target, edge_data in subgraph.edges(data=True):
-            source_id = node_to_id[source]
-            target_id = node_to_id[target]
-            weight = edge_data.get('weight', 1.0)
-            im.addLink(source_id, target_id, weight)
-        
-        # Run algorithm
+
+        for n in subgraph.nodes():
+            im.addNode(node_to_id[n])
+        for s, t, ed in subgraph.edges(data=True):
+            im.addLink(node_to_id[s], node_to_id[t], ed.get("weight", 1.0))
+
         im.run()
-        
-        # Extract communities
-        communities = defaultdict(list)
+        result = defaultdict(list)
         for node in im.tree:
             if node.isLeaf:
-                node_id = node.physicalId
-                module_id = node.moduleIndex()
-                original_node = id_to_node[node_id]
-                communities[str(module_id)].append(original_node)
-        
-        return dict(communities)
-    
+                result[str(node.moduleIndex())].append(id_to_node[node.physicalId])
+        return dict(result)
+
     def get_community_entities(
-        self, 
-        kg: KnowledgeGraph, 
-        community_id: str, 
+        self,
+        kg: KnowledgeGraph,
+        community_id: str,
         hierarchical_communities: Dict[str, Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """
-        Get the entities and relationships for a community.
-        
-        Args:
-            kg: The knowledge graph
-            community_id: The community ID
-            hierarchical_communities: The hierarchical community structure
-            
-        Returns:
-            Dictionary with entity and relationship data for the community
-        """
-        # Find the community in the hierarchy
-        community_data = None
-        community_level = None
-        
-        for level_key, level_data in hierarchical_communities.items():
-            if community_id in level_data["communities"]:
-                community_data = level_data["communities"][community_id]
-                community_level = level_data["level"]
+        for level, data in hierarchical_communities.items():
+            if community_id in data["communities"]:
+                community_data = data["communities"][community_id]
                 break
-        
-        if not community_data:
+        else:
             return {}
-        
-        # Get the entity nodes
-        node_ids = community_data["nodes"]
-        
-        # Extract entities
-        entities = {}
-        for node_id in node_ids:
-            if node_id in kg.entities:
-                entities[node_id] = kg.entities[node_id].to_dict()
-        
-        # Extract relationships within this community
-        relationships = {}
-        for rel_id, rel in kg.relationships.items():
-            if rel.source_id in node_ids and rel.target_id in node_ids:
-                relationships[rel_id] = rel.to_dict()
-        
-        # Extract claims for these entities
-        claims = {}
-        for claim_id, claim in kg.claims.items():
-            # Check if any entity in the claim is in this community
-            if any(entity_id in node_ids for entity_id in claim.entity_ids):
-                claims[claim_id] = claim.to_dict()
-        
+
+        nodes = community_data["nodes"]
+        entities = {eid: e.to_dict() for eid, e in kg.entities.items() if eid in nodes}
+        relationships = {
+            rid: r.to_dict() for rid, r in kg.relationships.items()
+            if r.source_id in nodes and r.target_id in nodes
+        }
+        claims = {
+            cid: c.to_dict() for cid, c in kg.claims.items()
+            if any(eid in nodes for eid in c.entity_ids)
+        }
+
         return {
             "community_id": community_id,
-            "level": community_level,
-            "size": len(node_ids),
+            "level": data["level"],
+            "size": len(nodes),
             "flow": community_data.get("flow", 0.0),
             "description_length": community_data.get("description_length", 0.0),
             "entities": entities,
             "relationships": relationships,
             "claims": claims
         }
+
+
+def detect_communities(documents_path: str) -> List[List[str]]:
+    """
+    Standalone function for detecting communities from a documents path.
+    This is a simplified implementation for compatibility with map_reduce.py
+    """
+    # For now, return a placeholder - this would need to be implemented
+    # based on the specific requirements of the map_reduce processor
+    return [["placeholder_community"]]
