@@ -119,9 +119,6 @@ class AnswerGenerator:
 
         response_json = await self.llm_client.extract_json(prompt)
 
-        print("[DEBUG] Full structured reduce response:")
-        print(json.dumps(response_json, indent=2))
-
         answer_text = response_json.get("answer")
         topics = response_json.get("topics")
 
