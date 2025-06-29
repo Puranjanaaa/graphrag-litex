@@ -46,7 +46,8 @@ class GraphRAG:
         print(f"Starting document indexing process for {len(documents)} documents...")
         
         print("Chunking documents...")
-        text_chunks = self.text_chunker.chunk_documents(documents)
+        text_chunks = await self.text_chunker.chunk_documents(documents)
+
         print(f"Created {len(text_chunks)} text chunks.")
         
         print("Building knowledge graph...")
@@ -60,7 +61,10 @@ class GraphRAG:
               f"{relationships_count} relationships, and {claims_count} claims.")
         
         print("Detecting communities...")
-        self.community_hierarchy = self.community_detector.detect_communities(self.knowledge_graph)
+        self.community_hierarchy = await asyncio.to_thread(
+                                    self.community_detector.detect_communities,
+                                    self.knowledge_graph
+                                )
         community_levels = list(self.community_hierarchy.keys())
         print(f"Detected community levels: {', '.join(community_levels)}")
         

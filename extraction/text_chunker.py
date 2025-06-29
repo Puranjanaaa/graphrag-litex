@@ -3,8 +3,10 @@ Fixed text chunking utilities for GraphRAG.
 """
 from typing import List, Dict, Any
 import uuid
+import asyncio
 import tiktoken
 import logging
+
 
 # Set up logging
 logger = logging.getLogger("TextChunker")
@@ -64,7 +66,8 @@ class TextChunker:
     
     def chunk_text(self, text: str, source_id: str) -> List[TextChunk]:
         """
-        Split text into chunks.
+        Blocking function. Split text into chunks.
+        Call this via `await asyncio.to_thread(...)` from async code.
         
         Args:
             text: The text to chunk
@@ -73,68 +76,52 @@ class TextChunker:
         Returns:
             List of text chunks
         """
-        # Convert text to tokens
         logger.info(f"Chunking text for source_id={source_id}, text length={len(text)} characters")
+        
         tokens = self.encoding.encode(text)
         token_count = len(tokens)
         logger.info(f"Token count: {token_count}")
         
-        # Handle empty or very small documents
         if token_count == 0:
             logger.warning(f"Empty document: {source_id}")
             return []
-        
+
         if token_count <= self.chunk_size:
-            # Document fits in a single chunk
             logger.info(f"Document fits in a single chunk: {token_count} ≤ {self.chunk_size}")
             chunk_text = self.encoding.decode(tokens)
-            chunk = TextChunk(
-                text=chunk_text,
-                source_id=source_id,
-                chunk_id=f"{source_id}_0"
-            )
-            return [chunk]
+            return [TextChunk(text=chunk_text, source_id=source_id, chunk_id=f"{source_id}_0")]
         
-        # Split tokens into chunks
         chunks = []
         chunk_start = 0
         chunk_count = 0
         
         while chunk_start < token_count:
-            # Determine the end of the current chunk
             chunk_end = min(chunk_start + self.chunk_size, token_count)
-            
-            logger.debug(f"Creating chunk {chunk_count} from positions {chunk_start} to {chunk_end}")
-            
-            # Convert chunk tokens back to text
             chunk_tokens = tokens[chunk_start:chunk_end]
             chunk_text = self.encoding.decode(chunk_tokens)
             
-            # Create a text chunk
-            chunk = TextChunk(
-                text=chunk_text,
-                source_id=source_id,
-                chunk_id=f"{source_id}_{chunk_count}"
+            chunks.append(
+                TextChunk(
+                    text=chunk_text,
+                    source_id=source_id,
+                    chunk_id=f"{source_id}_{chunk_count}"
+                )
             )
-            chunks.append(chunk)
             
-            # Advance the counter
             chunk_count += 1
-            
-            # Move the start index for the next chunk (with overlap)
             chunk_start = chunk_end - self.chunk_overlap
             
-            # If the next chunk would be too small, just end here
             if chunk_start + self.chunk_size - self.chunk_overlap >= token_count:
                 break
-        
+
         logger.info(f"Created {len(chunks)} chunks for document {source_id}")
         return chunks
+
     
-    def chunk_documents(self, documents: Dict[str, str]) -> List[TextChunk]:
+    async def chunk_documents(self, documents: Dict[str, str]) -> List[TextChunk]:
         """
-        Split multiple documents into chunks.
-        
+        Split multiple documents into chunks asynchronously.
+
         Args:
             documents: Dictionary of {document_id: document_text}
             
@@ -142,12 +129,13 @@ class TextChunker:
             List of text chunks across all documents
         """
         logger.info(f"Chunking {len(documents)} documents")
-        all_chunks = []
         
-        for doc_id, doc_text in documents.items():
-            logger.info(f"Processing document {doc_id}, length={len(doc_text)} characters")
-            doc_chunks = self.chunk_text(doc_text, doc_id)
-            all_chunks.extend(doc_chunks)
+        # Run chunk_text in parallel threads
+        results = await asyncio.gather(
+            *(asyncio.to_thread(self.chunk_text, doc_text, doc_id) for doc_id, doc_text in documents.items())
+        )
+
+        all_chunks = [chunk for doc_chunks in results for chunk in doc_chunks]
         
         logger.info(f"Created {len(all_chunks)} chunks total across all documents")
         return all_chunks

@@ -99,7 +99,7 @@ class SimpleClaimExtractor:
         entity_map: Dict[str, List[str]]  # Map of chunk_id to entity names in that chunk
     ) -> List[Claim]:
         """
-        Extract claims from multiple text chunks.
+        Extract claims from multiple text chunks concurrently.
         
         Args:
             text_chunks: The text chunks to extract from
@@ -109,22 +109,29 @@ class SimpleClaimExtractor:
             List of extracted claims
         """
         logger.info(f"Extracting claims from {len(text_chunks)} chunks")
-        
-        # Process sequentially to avoid overwhelming the model
-        all_claims = []
-        
+
+        tasks = []
+        chunk_refs = []
+
         for chunk in text_chunks:
             entity_names = entity_map.get(chunk.chunk_id, [])
             if entity_names:
-                try:
-                    claims = await self.extract_from_chunk(chunk, entity_names)
-                    all_claims.extend(claims)
-                    logger.info(f"Processed chunk {chunk.chunk_id}: {len(claims)} claims")
-                except Exception as e:
-                    logger.error(f"Error processing chunk {chunk.chunk_id}: {e}")
-        
+                tasks.append(self.extract_from_chunk(chunk, entity_names))
+                chunk_refs.append(chunk)
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_claims = []
+        for chunk, result in zip(chunk_refs, results):
+            if isinstance(result, Exception):
+                logger.error(f"Error processing chunk {chunk.chunk_id}: {result}")
+                continue
+            all_claims.extend(result)
+            logger.info(f"Processed chunk {chunk.chunk_id}: {len(result)} claims")
+
         logger.info(f"Total: {len(all_claims)} claims extracted")
         return all_claims
+
     
     def _create_claim_prompt(self, text: str, entity_names: List[str]) -> str:
         """
