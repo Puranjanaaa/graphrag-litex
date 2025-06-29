@@ -94,7 +94,7 @@ class SimpleEntityExtractor:
         text_chunks: List[TextChunk]
     ) -> Tuple[List[Entity], List[Relationship]]:
         """
-        Extract entities and relationships from multiple text chunks.
+        Extract entities and relationships from multiple text chunks concurrently.
         
         Args:
             text_chunks: The text chunks to extract from
@@ -103,22 +103,26 @@ class SimpleEntityExtractor:
             A tuple of (entities, relationships)
         """
         logger.info(f"Extracting from {len(text_chunks)} chunks")
-        
-        # Process chunks sequentially to avoid overwhelming the model
+
+        # Launch concurrent extraction tasks
+        tasks = [self.extract_from_chunk(chunk) for chunk in text_chunks]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
         all_entities = []
         all_relationships = []
-        
-        for chunk in text_chunks:
-            try:
-                entities, relationships = await self.extract_from_chunk(chunk)
-                all_entities.extend(entities)
-                all_relationships.extend(relationships)
-                logger.info(f"Processed chunk {chunk.chunk_id}: {len(entities)} entities, {len(relationships)} relationships")
-            except Exception as e:
-                logger.error(f"Error processing chunk {chunk.chunk_id}: {e}")
-        
+
+        for chunk, result in zip(text_chunks, results):
+            if isinstance(result, Exception):
+                logger.error(f"Error processing chunk {chunk.chunk_id}: {result}")
+                continue
+            entities, relationships = result
+            all_entities.extend(entities)
+            all_relationships.extend(relationships)
+            logger.info(f"Processed chunk {chunk.chunk_id}: {len(entities)} entities, {len(relationships)} relationships")
+
         logger.info(f"Total: {len(all_entities)} entities, {len(all_relationships)} relationships")
         return all_entities, all_relationships
+
     
     def _create_extraction_prompt(self, text: str) -> str:
         """
