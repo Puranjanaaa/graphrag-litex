@@ -81,7 +81,7 @@ async def run_simple_graphrag(
     logger.info("Creating Simple GraphRAG instance")
     graph_rag = SimpleGraphRAG(config)
 
-    print("\n=== Indexing Documents with Simple GraphRAG ===\n")
+    logger.info("=== Indexing Documents with Simple GraphRAG ===")
     logger.info(f"Starting indexing of {len(documents)} documents")
 
     try:
@@ -95,7 +95,7 @@ async def run_simple_graphrag(
         logger.info(f"Saving graph to {save_directory}")
         graph_rag.save(save_directory)
 
-    print("\n=== Answering Questions with Simple GraphRAG ===\n")
+    logger.info("=== Answering Questions with Simple GraphRAG ===")
 
     tasks = [
         graph_rag.answer_generator.generate_answer(
@@ -168,7 +168,6 @@ async def main():
         return
 
     logger.info(f"Loaded {len(documents)} documents")
-    print(f"Loaded {len(documents)} documents.")
 
     questions = args.questions or [
         "What are the main topics discussed in these documents?",
@@ -191,13 +190,15 @@ if __name__ == "__main__":
         lm_studio_url = LM_STUDIO_URL
         try:
             urllib.request.urlopen(f"{lm_studio_url}/models").close()
-            print(f"LM Studio server detected at {lm_studio_url}")
+            logger.info(f"LM Studio server detected at {lm_studio_url}")
         except (urllib.error.URLError, ConnectionRefusedError):
+            logger.warning(f"LM Studio server not detected at {lm_studio_url}")
             print(f"Warning: LM Studio server not detected at {lm_studio_url}")
             print("Please make sure LM Studio is running with the API server enabled.")
             print("Continue anyway? (y/n)")
             response = input().lower()
             if response != 'y':
+                logger.info("User chose not to continue without LM Studio.")
                 print("Exiting. Please start LM Studio server and try again.")
                 sys.exit(1)
 
