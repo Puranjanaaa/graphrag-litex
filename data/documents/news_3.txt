@@ -1,0 +1,2 @@
+Amazon Web Services is one of the leading cloud platforms in the world. Many startups rely on AWS for scalable infrastructure. AWS offers services like EC2, S3, and Lambda.
+
