@@ -91,7 +91,6 @@ class MapReduceProcessor:
 
         except Exception as e:
             logger.error(f"Error in default_map_function: {str(e)}")
-            logger.debug(traceback.format_exc())
             return {
                 "answer": f"Error processing item: {str(e)}",
                 "helpfulness": 0.0,
@@ -157,7 +156,6 @@ class MapReduceProcessor:
 
         except Exception as e:
             logger.error(f"Error parsing structured reduce output: {e}")
-            logger.debug(traceback.format_exc())
             return {
                 "answer": "⚠️ Failed to parse a structured summary from the LLM. Please inspect community-level answers.",
                 "topics": [],

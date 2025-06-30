@@ -18,6 +18,7 @@ from models.knowledge_graph import KnowledgeGraph
 from extraction.text_chunker import TextChunk
 from extraction.simple_entity_extractor import SimpleEntityExtractor
 from extraction.simple_claim_extractor import SimpleClaimExtractor
+from extraction.entity_resolver import EntityResolver  # ✅ NEW: Import resolver
 
 class SimpleGraphBuilder:
     """
@@ -42,6 +43,7 @@ class SimpleGraphBuilder:
         self.claim_extractor = claim_extractor
         self.config = config
         self.min_relationship_strength = config.min_relationship_strength
+        self.entity_resolver = EntityResolver()  # ✅ NEW: Instantiate resolver
         
         logger.info(f"Simple graph builder initialized")
     
@@ -60,7 +62,11 @@ class SimpleGraphBuilder:
         entities, relationships = await self.entity_extractor.extract_from_chunks(text_chunks)
         
         logger.info(f"Extracted {len(entities)} entities and {len(relationships)} relationships")
-        
+
+        logger.info("Resolving semantically equivalent entities...")
+        entities = self.entity_resolver.resolve_entities(entities)
+        logger.info(f"{len(entities)} canonical entities after resolution")
+
         # Create a new knowledge graph
         kg = KnowledgeGraph()
         
