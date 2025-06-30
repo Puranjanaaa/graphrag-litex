@@ -1,22 +1,24 @@
 """
 LLM API wrapper for interacting with language models.
 """
+
 import os
 import json
 import asyncio
 import backoff
+import logging
 from typing import Dict, Any, List, Optional
 
 import aiohttp
-import logging
+from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
 
 from config import GraphRAGConfig
-from sentence_transformers import SentenceTransformer
-from dotenv import load_dotenv
-
 
 load_dotenv()
 LM_STUDIO_URL = os.getenv("LM_STUDIO_URL")
+
+logger = logging.getLogger("LLMClient")
 
 
 class LLMClient:
@@ -32,7 +34,6 @@ class LLMClient:
 
         if self.logging_enabled:
             logging.basicConfig(level=logging.INFO)
-            self.logger = logging.getLogger("LLMClient")
 
     @backoff.on_exception(
         backoff.expo,
@@ -55,7 +56,7 @@ class LLMClient:
         max_tokens = max_tokens or self.config.llm_max_tokens
 
         if self.logging_enabled:
-            self.logger.info(f"Sending prompt to local model (first 100 chars): {prompt[:100]}...")
+            logger.info(f"Sending prompt to local model (first 100 chars): {prompt[:100]}...")
 
         payload = {
             "model": model or "local-model",
@@ -74,18 +75,20 @@ class LLMClient:
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        raise ValueError(f"Error from LM Studio API: {response.status}, {error_text}")
+                        logger.error(f"Error from LM Studio API: {response.status}, {error_text}")
+                        raise ValueError(f"Error from LM Studio API: {response.status}")
 
                     response_json = await response.json()
                     if "choices" in response_json and len(response_json["choices"]) > 0:
                         result = response_json["choices"][0]["message"]["content"]
 
                         if self.logging_enabled:
-                            self.logger.info(f"Received response (first 100 chars): {result[:100]}...")
+                            logger.info(f"Received response (first 100 chars): {result[:100]}...")
 
                         return result
                     raise ValueError(f"Invalid response format: {response_json}")
         except Exception as e:
+            logger.error(f"Exception in LLMClient.generate: {e}")
             raise
 
     @backoff.on_exception(
@@ -125,7 +128,7 @@ class LLMClient:
             return json.loads(response_text)
         except json.JSONDecodeError as e:
             if self.logging_enabled:
-                self.logger.warning(f"Initial JSON parse failed: {e}. Retrying with simplified prompt.")
+                logger.warning(f"Initial JSON parse failed: {e}. Retrying with simplified prompt.")
 
             retry_prompt = (
                 "Please return the following as a valid JSON object with no additional text.\n\n" +
@@ -145,7 +148,7 @@ class LLMClient:
                 return json.loads(retry_response)
             except json.JSONDecodeError:
                 if self.logging_enabled:
-                    self.logger.error(f"Retry failed to parse JSON. Raw output: {retry_response[:300]}")
+                    logger.error(f"Retry failed to parse JSON. Raw output: {retry_response[:300]}")
                 return {
                     "error": "Failed to parse response as JSON",
                     "raw_response": retry_response[:500] + ("..." if len(retry_response) > 500 else "")

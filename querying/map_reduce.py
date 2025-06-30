@@ -1,10 +1,16 @@
 from typing import List, Dict, Any, Tuple, Callable, TypeVar, Awaitable
+import logging
+import traceback
+
 from config import GraphRAGConfig
 from utils.llm_client import LLMClient
 from utils.async_utils import map_async
 
 T = TypeVar('T')
 R = TypeVar('R')
+
+logger = logging.getLogger("MapReduceProcessor")
+
 
 class MapReduceProcessor:
     def __init__(self, llm_client: LLMClient, config: GraphRAGConfig):
@@ -29,6 +35,7 @@ class MapReduceProcessor:
         filtered_results = [result for result in mapped_results if result and result.get("answer")]
 
         if not filtered_results:
+            logger.warning("No relevant results after mapping. Returning default empty answer.")
             return {
                 "answer": "No relevant information found to answer the question.",
                 "topics": [],
@@ -83,9 +90,8 @@ class MapReduceProcessor:
             }
 
         except Exception as e:
-            import traceback
-            print(f"[DEBUG] Error in default_map_function: {str(e)}")
-            print(f"[DEBUG] Error traceback: {traceback.format_exc()}")
+            logger.error(f"Error in default_map_function: {str(e)}")
+            logger.debug(traceback.format_exc())
             return {
                 "answer": f"Error processing item: {str(e)}",
                 "helpfulness": 0.0,
@@ -102,6 +108,7 @@ class MapReduceProcessor:
         template_formatter: Callable[[str, str], str]
     ) -> Dict[str, Any]:
         if not mapped_results:
+            logger.warning("No mapped results provided to reduce function.")
             return {
                 "answer": "No relevant information found to answer the question.",
                 "topics": [],
@@ -149,9 +156,8 @@ class MapReduceProcessor:
             }
 
         except Exception as e:
-            import traceback
-            print(f"[DEBUG] Error parsing structured reduce output: {e}")
-            print(traceback.format_exc())
+            logger.error(f"Error parsing structured reduce output: {e}")
+            logger.debug(traceback.format_exc())
             return {
                 "answer": "⚠️ Failed to parse a structured summary from the LLM. Please inspect community-level answers.",
                 "topics": [],

@@ -1,12 +1,16 @@
 from typing import List, Dict, Any, Optional
 import random
+import logging
+import json
+
 from config import GraphRAGConfig
 from models.knowledge_graph import KnowledgeGraph
 from utils.llm_client import LLMClient
 from utils.prompts import PromptTemplates
 from querying.map_reduce import MapReduceProcessor
 from utils.embedding_utils import EmbeddingUtils
-import json
+
+logger = logging.getLogger("AnswerGenerator")
 
 
 class AnswerGenerator:
@@ -25,6 +29,7 @@ class AnswerGenerator:
     ) -> dict:
         summaries = self._get_community_summaries(kg, community_level)
         if not summaries:
+            logger.warning("No community summaries available to answer the question.")
             return {
                 "answer": "No community summaries available to answer the question.",
                 "topics": [],
@@ -40,6 +45,7 @@ class AnswerGenerator:
         )
 
         if not selected:
+            logger.warning("No relevant community summaries found for the question.")
             return {
                 "answer": "No relevant community summaries found for the question.",
                 "topics": [],
@@ -55,7 +61,6 @@ class AnswerGenerator:
             reduce_func=self._reduce_community_answers
         )
 
-        # Fill in entities based on selected IDs
         result.setdefault("used_entities", [s.get("id") for s in selected])
         return result
 
@@ -123,11 +128,11 @@ class AnswerGenerator:
         topics = response_json.get("topics")
 
         if not answer_text or not isinstance(answer_text, str) or not answer_text.strip():
-            print("⚠️ [WARNING] LLM returned no valid 'answer'.")
+            logger.warning("LLM returned no valid 'answer'.")
             answer_text = "⚠️ Final structured answer was empty or missing."
 
         if not isinstance(topics, list):
-            print("⚠️ [WARNING] LLM returned invalid or missing 'topics'.")
+            logger.warning("LLM returned invalid or missing 'topics'.")
             topics = []
 
         used_relationships = []
